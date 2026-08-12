@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "Asas\\x64\\Debug\\ScreenScanner.obj",
+            "outputs": [
+                "Asas\\x64\\Debug\\ScreenScanner.cpp.obj.dt.module.json",
+                "Asas\\x64\\Debug\\ScreenScanner.cpp.obj.dt.d.json"
+            ],
+            "requires": []
+        }
+    ]
+}
