@@ -65,3 +65,48 @@ bool ScreenScanner::IsBarLow(int x, int y, int colorType, int threshold) {
         return (blue < threshold); // Eğer mavilik sınırın altındaysa "Mana Azaldı" (True) döner
     }
 }
+
+bool ScreenScanner::IsColumnLow(int targetX, int topY, int bottomY, int colorType) {
+    int height = bottomY - topY;
+    if (height <= 0) return false;
+
+    // Sadece 1 piksel genişliğinde, barın yüksekliği kadar incecik, dikey bir çizgi fotoğrafı çekiyoruz
+    cv::Mat colMat = CaptureScreen(targetX, topY, 1, height);
+    if (colMat.empty()) return false;
+
+    // Yukarıdan aşağıya tüm pikselleri sırayla kontrol et
+    for (int i = 0; i < height; ++i) {
+        cv::Vec4b pixel = colMat.at<cv::Vec4b>(i, 0);
+        int blue = pixel[0];
+        int green = pixel[1];
+        int red = pixel[2];
+
+        bool isRealColor = false;
+
+        if (colorType == 0) {
+            // HP KONTROLÜ (Gerçek Kırmızı Filtresi)
+            // Kırmızı yoğun olmalı VE yeşil ile maviden en az 40 birim daha yüksek olmalı. 
+            // (Bu sayede içindeki beyaz yazıları ve siyah gölgeleri tamamen es geçer!)
+            if (red > 90 && red > green + 40 && red > blue + 40) {
+                isRealColor = true;
+            }
+        }
+        else {
+            // MP KONTROLÜ (Gerçek Mavi Filtresi)
+            // Mavi yoğun olmalı VE kırmızı ile yeşilden en az 40 birim yüksek olmalı.
+            if (blue > 90 && blue > red + 40 && blue > green + 40) {
+                isRealColor = true;
+            }
+        }
+
+        // Eğer dikey çizginin HERHANGİ bir yerinde 1 tane bile gerçek kırmızı/mavi piksel bulursak,
+        // can oraya henüz inmemiş demektir, döngüyü kırıp pot basmayı engelliyoruz.
+        if (isRealColor) {
+            return false;
+        }
+    }
+
+    // Eğer tüm dikey sütun (yazılar, siyahlıklar) bittiyse ve HİÇ gerçek kırmızı/mavi bulamadıysak
+    // can/mana kesinlikle o yüzdenin gerisine düşmüş demektir! Pot bas!
+    return true;
+}

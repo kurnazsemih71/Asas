@@ -7,6 +7,12 @@ MacroEngine::MacroEngine() {
     g_delayMs = 350;
     g_hpKey = 0; g_mpKey = 0; g_minorKey = 0;
     g_skillPressMs = 25; g_skillWaitMs = 5; g_rPressMs = 20; g_rWaitMs = 20;
+
+    // Yüzdelik bar değerlerinin başlangıç ayarları (Geçmişten kalanlar)
+    g_hpLimit = 50;
+    g_mpLimit = 50;
+    g_hpRect = { 0, 0, 0, 0 };
+    g_mpRect = { 0, 0, 0, 0 };
 }
 
 MacroEngine::~MacroEngine() {
@@ -47,6 +53,21 @@ void MacroEngine::UpdateSettings(const std::vector<WORD>& skills, int delay, WOR
     g_skillWaitMs = sWait;
     g_rPressMs = rPress;
     g_rWaitMs = rWait;
+}
+
+void MacroEngine::SetHpRect(RECT r, COLORREF c) {
+    g_hpRect = r;
+    g_originalHpColor = c;
+}
+
+void MacroEngine::SetMpRect(RECT r, COLORREF c) {
+    g_mpRect = r;
+    g_originalMpColor = c;
+}
+
+void MacroEngine::SetLimits(int hpLimit, int mpLimit) {
+    g_hpLimit = hpLimit;
+    g_mpLimit = mpLimit;
 }
 
 int MacroEngine::GetRandomDelay(int minDelay, int maxDelay) {
@@ -134,25 +155,52 @@ void MacroEngine::ComboLoop() {
     }
 }
 
+// POT MOTORLARI İPTAL EDİLDİ: Artık 3, 4, 5, 6, 7 tuşlarını sırayla tarayıp boştate olanları vuracak (Skill Rotation)
 void MacroEngine::HpLoop() {
+    // 3, 4, 5, 6, 7 tuş kodları (Virtual Key karakter kodları)
+    int skillKeys[] = { '3', '4', '5', '6', '7' };
+    int totalSkills = 5;
+
+    // Her skill için cooldown (bekleme süresi) takibi
+    auto lastCastTimes = std::vector<std::chrono::steady_clock::time_point>(totalSkills, std::chrono::steady_clock::now() - std::chrono::seconds(5));
+
     while (!g_exit) {
         bool isCapsOn = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
-        if (g_isMasterActive && isCapsOn && (GetAsyncKeyState('F') & 0x8000)) {
-            SendKey(g_hpKey, GetRandomDelay(12, 25));
-            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(140, 180)));
+
+        if (g_isMasterActive && isCapsOn) {
+            // Sağ tık (VK_RBUTTON) basılı tutulduğunda veya aktifken skill döngüsü akmaya başlar
+            bool isTriggered = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+
+            if (isTriggered) {
+                auto now = std::chrono::steady_clock::now();
+
+                for (int i = 0; i < totalSkills; i++) {
+                    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCastTimes[i]).count();
+
+                    // Eğer skillin bekleme süresi (örn: 1000ms / 1 saniye) bittiyse vur
+                    if (elapsedMs > 1000) {
+                        SendKey(skillKeys[i], GetRandomDelay(15, 25));
+                        lastCastTimes[i] = std::chrono::steady_clock::now(); // Cooldown'ı başlat
+
+                        std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(60, 100)));
+                        break; // Sıradaki skill için döngüyü akıt
+                    }
+                }
+            }
+            else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            }
         }
-        else { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+        else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
     }
 }
 
+// MP Loop da boşta kalmasın, burayı da yedek skill tarayıcı veya serbest bırakabiliriz (Şimdilik boşta bekler)
 void MacroEngine::MpLoop() {
     while (!g_exit) {
-        bool isCapsOn = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
-        if (g_isMasterActive && isCapsOn && (GetAsyncKeyState(VK_XBUTTON1) & 0x8000)) {
-            SendKey(g_mpKey, GetRandomDelay(12, 25));
-            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(140, 180)));
-        }
-        else { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 

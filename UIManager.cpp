@@ -38,7 +38,7 @@ LRESULT CALLBACK GlobalWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 UIManager::UIManager(MacroEngine& engine) : m_engine(engine) {
     g_pThis = this;
-    m_hwnd = NULL; // DÜZELTİLDİ
+    m_hwnd = NULL;
     g_isMiniMode = false;
     g_isTopMost = false;
     g_isMasterActive = false;
@@ -47,6 +47,7 @@ UIManager::UIManager(MacroEngine& engine) : m_engine(engine) {
     g_hbrMainBg = g_hbrCardBg = g_hbrBlack = g_hbrTopBar = g_hbrMiniBg = g_hbrMiniListBg = NULL;
     g_hTopTitle = g_hTopBtn = g_hMasterBtn = g_hStatusLabel = NULL;
     g_hMsEdit = g_hHpEdit = g_hMpEdit = g_hMinorEdit = NULL;
+    g_hHpPctEdit = g_hMpPctEdit = NULL; // Yüzdelik kutucukları
     g_hSkillPressEdit = g_hSkillWaitEdit = g_hRPressEdit = g_hRWaitEdit = NULL;
     g_hMiniTitle = g_hMiniList = g_hMiniTimer = NULL;
     for (int i = 0; i < 5; ++i) g_hEdits[i] = NULL;
@@ -72,8 +73,8 @@ bool UIManager::Initialize(HINSTANCE hInstance, int nCmdShow) {
     wc.hCursor = LoadCursor(0, IDC_ARROW);
     if (!RegisterClassW(&wc)) return false;
 
-    m_hwnd = CreateWindowW(wc.lpszClassName, L"Pro Asas Macro - OOP", WS_POPUP | WS_VISIBLE, 150, 150, 280, 340, 0, 0, hInstance, 0); // DÜZELTİLDİ
-    return m_hwnd != NULL; // DÜZELTİLDİ
+    m_hwnd = CreateWindowW(wc.lpszClassName, L"Pro Asas Macro - OOP", WS_POPUP | WS_VISIBLE, 150, 150, 280, 340, 0, 0, hInstance, 0);
+    return m_hwnd != NULL;
 }
 
 void UIManager::ToggleMiniMode() {
@@ -81,9 +82,9 @@ void UIManager::ToggleMiniMode() {
     for (HWND h : g_normalControls) ShowWindow(h, g_isMiniMode ? SW_HIDE : SW_SHOW);
     for (HWND h : g_miniControls) ShowWindow(h, g_isMiniMode ? SW_SHOW : SW_HIDE);
 
-    if (g_isMiniMode) { SetWindowPos(m_hwnd, NULL, 0, 0, 260, 132, SWP_NOMOVE | SWP_NOZORDER); } // DÜZELTİLDİ
-    else { SetWindowPos(m_hwnd, NULL, 0, 0, 280, 340, SWP_NOMOVE | SWP_NOZORDER); } // DÜZELTİLDİ
-    InvalidateRect(m_hwnd, NULL, TRUE); // DÜZELTİLDİ
+    if (g_isMiniMode) { SetWindowPos(m_hwnd, NULL, 0, 0, 260, 132, SWP_NOMOVE | SWP_NOZORDER); }
+    else { SetWindowPos(m_hwnd, NULL, 0, 0, 280, 340, SWP_NOMOVE | SWP_NOZORDER); }
+    InvalidateRect(m_hwnd, NULL, TRUE);
 }
 
 void UIManager::ReadAndApplySettings() {
@@ -103,7 +104,15 @@ void UIManager::ReadAndApplySettings() {
     GetWindowTextW(g_hRPressEdit, buf, 10); int rPress = _wtoi(buf); if (rPress < 1) rPress = 1;
     GetWindowTextW(g_hRWaitEdit, buf, 10); int rWait = _wtoi(buf); if (rWait < 1) rWait = 1;
 
+    // Yüzdelik limitleri oku ve 1 ile 99 arasında sınırla
+    GetWindowTextW(g_hHpPctEdit, buf, 10); int hpLimit = _wtoi(buf);
+    if (hpLimit < 1) hpLimit = 1; else if (hpLimit > 99) hpLimit = 99;
+
+    GetWindowTextW(g_hMpPctEdit, buf, 10); int mpLimit = _wtoi(buf);
+    if (mpLimit < 1) mpLimit = 1; else if (mpLimit > 99) mpLimit = 99;
+
     m_engine.UpdateSettings(skills, delayMs, hpKey, mpKey, minorKey, sPress, sWait, rPress, rWait);
+    m_engine.SetLimits(hpLimit, mpLimit);
 }
 
 LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -141,16 +150,29 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         g_hEdits[3] = AddN(CreateWindowW(L"EDIT", L"6", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 3 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S4, NULL, NULL));
         g_hEdits[4] = AddN(CreateWindowW(L"EDIT", L"7", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 4 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S5, NULL, NULL));
 
-        int rX = 125, rEX = 200;
-        AddN(CreateWindowW(L"STATIC", L"HP (F):", WS_VISIBLE | WS_CHILD, rX, stY, 70, 22, hwnd, NULL, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"MP (MSX1):", WS_VISIBLE | WS_CHILD, rX, stY + stp, 70, 22, hwnd, NULL, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"Minor (MSX2):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 2, 70, 22, hwnd, NULL, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"Hiz (ms):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 3, 70, 22, hwnd, NULL, NULL, NULL));
+        // --- SAĞ TARAF (Kompakt ve Şık Tasarım) ---
+        int rX = 115;
 
-        g_hHpEdit = AddN(CreateWindowW(L"EDIT", L"8", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY - 2, 40, 22, hwnd, (HMENU)IDC_EDT_HP, NULL, NULL));
-        g_hMpEdit = AddN(CreateWindowW(L"EDIT", L"9", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY + stp - 2, 40, 22, hwnd, (HMENU)IDC_EDT_MP, NULL, NULL));
-        g_hMinorEdit = AddN(CreateWindowW(L"EDIT", L"0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY + stp * 2 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_MIN, NULL, NULL));
-        g_hMsEdit = AddN(CreateWindowW(L"EDIT", L"350", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY + stp * 3 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_MS, NULL, NULL));
+        // HP Satırı
+        AddN(CreateWindowW(L"STATIC", L"HP:", WS_VISIBLE | WS_CHILD, rX, stY, 30, 22, hwnd, NULL, NULL, NULL));
+        g_hHpEdit = AddN(CreateWindowW(L"EDIT", L"8", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 30, stY - 2, 20, 22, hwnd, (HMENU)IDC_EDT_HP, NULL, NULL));
+        AddN(CreateWindowW(L"STATIC", L"%", WS_VISIBLE | WS_CHILD, rX + 55, stY, 15, 22, hwnd, NULL, NULL, NULL));
+        g_hHpPctEdit = AddN(CreateWindowW(L"EDIT", L"50", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 70, stY - 2, 30, 22, hwnd, (HMENU)214, NULL, NULL));
+        AddN(CreateWindowW(L"BUTTON", L"Sec", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, rX + 105, stY - 2, 40, 22, hwnd, (HMENU)998, NULL, NULL));
+
+        // MP Satırı
+        AddN(CreateWindowW(L"STATIC", L"MP:", WS_VISIBLE | WS_CHILD, rX, stY + stp, 30, 22, hwnd, NULL, NULL, NULL));
+        g_hMpEdit = AddN(CreateWindowW(L"EDIT", L"9", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 30, stY + stp - 2, 20, 22, hwnd, (HMENU)IDC_EDT_MP, NULL, NULL));
+        AddN(CreateWindowW(L"STATIC", L"%", WS_VISIBLE | WS_CHILD, rX + 55, stY + stp, 15, 22, hwnd, NULL, NULL, NULL));
+        g_hMpPctEdit = AddN(CreateWindowW(L"EDIT", L"50", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 70, stY + stp - 2, 30, 22, hwnd, (HMENU)215, NULL, NULL));
+        AddN(CreateWindowW(L"BUTTON", L"Sec", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, rX + 105, stY + stp - 2, 40, 22, hwnd, (HMENU)999, NULL, NULL));
+
+        // Minor ve Hız Satırları
+        AddN(CreateWindowW(L"STATIC", L"Minor (X2):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 2, 70, 22, hwnd, NULL, NULL, NULL));
+        g_hMinorEdit = AddN(CreateWindowW(L"EDIT", L"0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 75, stY + stp * 2 - 2, 25, 22, hwnd, (HMENU)IDC_EDT_MIN, NULL, NULL));
+
+        AddN(CreateWindowW(L"STATIC", L"Hiz (ms):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 3, 70, 22, hwnd, NULL, NULL, NULL));
+        g_hMsEdit = AddN(CreateWindowW(L"EDIT", L"350", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 75, stY + stp * 3 - 2, 35, 22, hwnd, (HMENU)IDC_EDT_MS, NULL, NULL));
 
         int advY = 180;
         AddN(CreateWindowW(L"STATIC", L"Skill Bas:", WS_VISIBLE | WS_CHILD, 15, advY, 65, 20, hwnd, NULL, NULL, NULL));
@@ -164,9 +186,6 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
         AddN(CreateWindowW(L"STATIC", L"R Bek:", WS_VISIBLE | WS_CHILD, 125, advY + stp, 65, 20, hwnd, NULL, NULL, NULL));
         g_hRWaitEdit = AddN(CreateWindowW(L"EDIT", L"20", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 195, advY + stp - 2, 35, 22, hwnd, (HMENU)IDC_EDT_R_W, NULL, NULL));
-
-        // Test Butonu: "Alan Seç"
-        AddN(CreateWindowW(L"BUTTON", L"Alan Sec (Test)", WS_VISIBLE | WS_CHILD, 15, 218, 250, 22, hwnd, (HMENU)999, NULL, NULL));
 
         g_hMasterBtn = AddN(CreateWindowW(L"BUTTON", L"SISTEM: PASIF (KAPALI)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 15, 245, 250, 40, hwnd, (HMENU)IDC_BTN_MAST, NULL, NULL));
         g_hStatusLabel = AddN(CreateWindowW(L"STATIC", L"CAPSLOCK: KAPALI", WS_VISIBLE | WS_CHILD | SS_CENTER, 15, 295, 250, 20, hwnd, NULL, NULL, NULL));
@@ -216,11 +235,6 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
         break;
     }
-    
-    // Test Butonu: "HP Seç"
-    CreateWindowW(L"BUTTON", L"Alan Sec (Test)", WS_VISIBLE | WS_CHILD, 15, 215, 120, 25, hwnd, (HMENU)999, NULL, NULL);
-
-
     case WM_LBUTTONDOWN: {
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
         if (pt.y < 35) {
@@ -274,6 +288,7 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             else if (id == IDC_BTN_TOP) { bgCol = g_isTopMost ? RGB(245, 158, 11) : RGB(31, 41, 55); textCol = g_isTopMost ? RGB(11, 15, 25) : RGB(255, 255, 255); }
             else if (id == IDC_BTN_CLOSE) { bgCol = RGB(239, 68, 68); }
             else if (id == IDC_BTN_MIN) { bgCol = RGB(31, 41, 55); }
+            else if (id == 998 || id == 999) { bgCol = RGB(55, 65, 81); textCol = RGB(255, 255, 255); } // SEC butonları için şık koyu renk
 
             HBRUSH hbr = CreateSolidBrush(bgCol); FillRect(hdc, &rect, hbr); DeleteObject(hbr);
             HBRUSH hbrBorder = CreateSolidBrush(RGB(60, 70, 90)); FrameRect(hdc, &rect, hbrBorder); DeleteObject(hbrBorder);
@@ -330,18 +345,28 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
         else if (id == IDC_BTN_CLOSE) { DestroyWindow(hwnd); }
         else if (id == IDC_BTN_MIN) { ShowWindow(hwnd, SW_MINIMIZE); }
-        else if (id == 999) {
-            // Butona tıklandığında Seçim Modülünü çağır
+        else if (id == 998 || id == 999) {
             RECT secim = RegionSelector::SelectRegion();
 
-            // Eğer ESC'ye basılmadıysa ve bir yer seçildiyse boyutları ekrana yazdır
             if (secim.right > secim.left && secim.bottom > secim.top) {
                 int width = secim.right - secim.left;
                 int height = secim.bottom - secim.top;
+                int targetX = secim.left + (width / 2);
+                int targetY = secim.top + (height / 4);
 
-                wchar_t mesaj[256];
-                wsprintfW(mesaj, L"X: %d, Y: %d\nGenislik: %d, Yukseklik: %d", secim.left, secim.top, width, height);
-                MessageBoxW(hwnd, mesaj, L"Secim Basarili", MB_OK | MB_ICONINFORMATION);
+                // O anki seçilen yerin orijinal rengini OpenCV ile hemen okuyoruz
+                ScreenScanner tempScanner;
+                cv::Mat m = tempScanner.CaptureScreen(targetX, targetY, 1, 1);
+                COLORREF pickedColor = RGB(0, 0, 0);
+                if (!m.empty()) {
+                    cv::Vec4b px = m.at<cv::Vec4b>(0, 0);
+                    pickedColor = RGB(px[2], px[1], px[0]); // R, G, B
+                }
+
+                if (id == 998) m_engine.SetHpRect(secim, pickedColor);
+                else m_engine.SetMpRect(secim, pickedColor);
+
+                MessageBeep(MB_OK);
             }
         }
         else if (id == IDC_BTN_TOP) {
@@ -350,7 +375,7 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             SetWindowPos(hwnd, g_isTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             InvalidateRect(g_hTopBtn, NULL, FALSE);
         }
-        
+
         if (HIWORD(wParam) == EN_CHANGE) { ReadAndApplySettings(); }
         break;
     }

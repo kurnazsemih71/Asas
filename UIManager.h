@@ -23,10 +23,10 @@ private:
 
     HWND g_hTopTitle, g_hTopBtn, g_hMasterBtn, g_hStatusLabel;
     HWND g_hEdits[5], g_hMsEdit, g_hHpEdit, g_hMpEdit, g_hMinorEdit;
+    HWND g_hHpPctEdit, g_hMpPctEdit; // YENİ: Yüzdelik (Pct) kutucukları
     HWND g_hSkillPressEdit, g_hSkillWaitEdit, g_hRPressEdit, g_hRWaitEdit;
     HWND g_hMiniTitle, g_hMiniList, g_hMiniTimer;
     std::chrono::system_clock::time_point g_sessionStartTime;
-
     void ToggleMiniMode();
     void ReadAndApplySettings();
 
