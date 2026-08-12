@@ -1,237 +1,111 @@
-// ==== AsasMacro_Pro_v15_Precision.cpp ====
-// Hassas Milisaniye Kontrollü, Piksel Kusursuzluğunda Mimari (F1-F8 Sayfa Korumalı + Ping Toleranslı)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <string>
-#include <vector>
-#include <thread>
-#include <chrono>
-#include <mutex>
+#include "UIManager.h"
 #include <ctime>
 #include <iomanip>
 #include <sstream>
-#include <random> // Rastgele sayı (Ping Toleransı) kütüphanesi eklendi
 
-// --- Global Değişkenler ---
-bool g_exit = false;
-bool g_isMasterActive = false;
-bool g_isCapsOn = false;
-bool g_isMiniMode = false;
-bool g_isTopMost = false;
-
-HFONT g_hFont, g_hBoldFont, g_hMiniListFont;
-HBRUSH g_hbrMainBg, g_hbrCardBg, g_hbrBlack, g_hbrTopBar, g_hbrMiniBg, g_hbrMiniListBg;
-
-std::thread g_comboThread, g_hpThread, g_mpThread, g_minorThread;
-std::mutex g_inputMutex;
-std::chrono::system_clock::time_point g_sessionStartTime;
-
-// UI Kontrol ID'leri
-#define IDC_BTN_TOP     101
-#define IDC_BTN_MAST    102
-#define IDC_BTN_TOMINI  103
-#define IDC_BTN_MIN     104
-#define IDC_BTN_CLOSE   105
-#define IDC_BTN_MINI_ON 401
+// Kontrol ID'leri
+#define IDC_BTN_TOP      101
+#define IDC_BTN_MAST     102
+#define IDC_BTN_TOMINI   103
+#define IDC_BTN_MIN      104
+#define IDC_BTN_CLOSE    105
+#define IDC_BTN_MINI_ON  401
 #define IDC_BTN_MINI_OFF 402
 #define IDC_BTN_MINI_EXP 403
-#define IDC_EDT_S1      201
-#define IDC_EDT_S2      202
-#define IDC_EDT_S3      203
-#define IDC_EDT_S4      204
-#define IDC_EDT_S5      205
-#define IDC_EDT_MS      206
-#define IDC_EDT_HP      207
-#define IDC_EDT_MP      208
-#define IDC_EDT_MIN     209
-#define IDC_EDT_SK_P    210
-#define IDC_EDT_SK_W    211
-#define IDC_EDT_R_P     212
-#define IDC_EDT_R_W     213
+#define IDC_EDT_S1       201
+#define IDC_EDT_S2       202
+#define IDC_EDT_S3       203
+#define IDC_EDT_S4       204
+#define IDC_EDT_S5       205
+#define IDC_EDT_MS       206
+#define IDC_EDT_HP       207
+#define IDC_EDT_MP       208
+#define IDC_EDT_MIN      209
+#define IDC_EDT_SK_P     210
+#define IDC_EDT_SK_W     211
+#define IDC_EDT_R_P      212
+#define IDC_EDT_R_W      213
 
-std::vector<HWND> g_normalControls;
-std::vector<HWND> g_miniControls;
+UIManager* g_pThis = nullptr;
 
-HWND g_hTopTitle, g_hTopBtn, g_hMasterBtn, g_hStatusLabel;
-HWND g_hEdits[5], g_hMsEdit, g_hHpEdit, g_hMpEdit, g_hMinorEdit;
-HWND g_hSkillPressEdit, g_hSkillWaitEdit, g_hRPressEdit, g_hRWaitEdit;
-HWND g_hMiniTitle, g_hMiniList, g_hMiniTimer;
-
-std::vector<WORD> g_skills;
-int g_delayMs = 350;
-WORD g_hpKey = 0, g_mpKey = 0, g_minorKey = 0;
-
-// Hassas Ayar Değişkenleri
-int g_skillPressMs = 25;
-int g_skillWaitMs = 5;
-int g_rPressMs = 20;
-int g_rWaitMs = 20;
-
-// =========================================================
-// RASTGELE GECİKME ÜRETİCİ (PING TOLERANSI)
-// =========================================================
-int GetRandomDelay(int minDelay, int maxDelay) {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::uniform_int_distribution<> distr(minDelay, maxDelay);
-    return distr(gen);
-}
-
-// =========================================================
-// DONANIM SEVİYESİ TUŞ BASMA & DÖNGÜLER
-// =========================================================
-void SendKey(WORD keyCode, int pressDelay = 15) {
-    if (keyCode == 0) return;
-    std::lock_guard<std::mutex> lock(g_inputMutex);
-    INPUT input = { 0 };
-    input.type = INPUT_KEYBOARD;
-    input.ki.wScan = MapVirtualKeyW(keyCode, MAPVK_VK_TO_VSC);
-    input.ki.wVk = 0;
-    input.ki.dwFlags = KEYEVENTF_SCANCODE;
-    SendInput(1, &input, sizeof(INPUT));
-
-    // Tuşa basılı tutma süresi de rastgelelik içerir
-    std::this_thread::sleep_for(std::chrono::milliseconds(pressDelay));
-
-    input.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
-    SendInput(1, &input, sizeof(INPUT));
-}
-
-void ReadSettings() {
-    wchar_t buf[10];
-    g_skills.clear();
-    for (int i = 0; i < 5; ++i) {
-        GetWindowTextW(g_hEdits[i], buf, 10);
-        if (wcslen(buf) > 0) g_skills.push_back(VkKeyScanW(buf[0]));
+LRESULT CALLBACK GlobalWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (g_pThis) {
+        return g_pThis->HandleMessage(hwnd, msg, wParam, lParam);
     }
-    GetWindowTextW(g_hMsEdit, buf, 10); g_delayMs = _wtoi(buf); if (g_delayMs < 50) g_delayMs = 50;
-    GetWindowTextW(g_hHpEdit, buf, 10); g_hpKey = wcslen(buf) > 0 ? VkKeyScanW(buf[0]) : 0;
-    GetWindowTextW(g_hMpEdit, buf, 10); g_mpKey = wcslen(buf) > 0 ? VkKeyScanW(buf[0]) : 0;
-    GetWindowTextW(g_hMinorEdit, buf, 10); g_minorKey = wcslen(buf) > 0 ? VkKeyScanW(buf[0]) : 0;
-
-    GetWindowTextW(g_hSkillPressEdit, buf, 10); g_skillPressMs = _wtoi(buf); if (g_skillPressMs < 1) g_skillPressMs = 1;
-    GetWindowTextW(g_hSkillWaitEdit, buf, 10); g_skillWaitMs = _wtoi(buf); if (g_skillWaitMs < 1) g_skillWaitMs = 1;
-    GetWindowTextW(g_hRPressEdit, buf, 10); g_rPressMs = _wtoi(buf); if (g_rPressMs < 1) g_rPressMs = 1;
-    GetWindowTextW(g_hRWaitEdit, buf, 10); g_rWaitMs = _wtoi(buf); if (g_rWaitMs < 1) g_rWaitMs = 1;
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// GÜNCELLENDİ: F1'den F8'e kadar tüm tuşları kapsar
-bool IsUserChangingPage() {
-    for (int i = VK_F1; i <= VK_F8; ++i) {
-        if (GetAsyncKeyState(i) & 0x8000) return true;
-    }
-    return false;
+UIManager::UIManager(MacroEngine& engine) : m_engine(engine) {
+    g_pThis = this;
+    m_hwnd = NULL; // DÜZELTİLDİ
+    g_isMiniMode = false;
+    g_isTopMost = false;
+    g_isMasterActive = false;
+    g_isCapsOn = false;
+    g_hFont = g_hBoldFont = g_hMiniListFont = NULL;
+    g_hbrMainBg = g_hbrCardBg = g_hbrBlack = g_hbrTopBar = g_hbrMiniBg = g_hbrMiniListBg = NULL;
+    g_hTopTitle = g_hTopBtn = g_hMasterBtn = g_hStatusLabel = NULL;
+    g_hMsEdit = g_hHpEdit = g_hMpEdit = g_hMinorEdit = NULL;
+    g_hSkillPressEdit = g_hSkillWaitEdit = g_hRPressEdit = g_hRWaitEdit = NULL;
+    g_hMiniTitle = g_hMiniList = g_hMiniTimer = NULL;
+    for (int i = 0; i < 5; ++i) g_hEdits[i] = NULL;
 }
 
-// GÜNCELLENDİ: F1-F8 taraması
-bool SmartSleep(int totalMs) {
-    int waited = 0;
-    while (waited < totalMs) {
-        if (!g_isMasterActive || !g_isCapsOn || g_exit) return true;
-        if (IsUserChangingPage()) return true; // Uyku sırasında F'e basılırsa uykuyu böl
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        waited += 10;
-    }
-    return false;
+UIManager::~UIManager() {
+    if (g_hFont) DeleteObject(g_hFont);
+    if (g_hBoldFont) DeleteObject(g_hBoldFont);
+    if (g_hMiniListFont) DeleteObject(g_hMiniListFont);
+    if (g_hbrMainBg) DeleteObject(g_hbrMainBg);
+    if (g_hbrCardBg) DeleteObject(g_hbrCardBg);
+    if (g_hbrBlack) DeleteObject(g_hbrBlack);
+    if (g_hbrTopBar) DeleteObject(g_hbrTopBar);
+    if (g_hbrMiniBg) DeleteObject(g_hbrMiniBg);
+    if (g_hbrMiniListBg) DeleteObject(g_hbrMiniListBg);
 }
 
-// GÜNCELLENDİ: Otomatik "Durdur-Başlat" ve "Rastgele Gecikme" Mantığı Entegre Edildi
-void ComboThread() {
-    while (!g_exit) {
-        if (g_isMasterActive && g_isCapsOn) {
+bool UIManager::Initialize(HINSTANCE hInstance, int nCmdShow) {
+    WNDCLASSW wc = { 0 };
+    wc.lpszClassName = L"AsasMacroOOP";
+    wc.hInstance = hInstance;
+    wc.lpfnWndProc = GlobalWndProc;
+    wc.hCursor = LoadCursor(0, IDC_ARROW);
+    if (!RegisterClassW(&wc)) return false;
 
-            // 1. Dış Kontrol: Yeni bir döngüye girmeden önce F1-F8'e basıldı mı?
-            if (IsUserChangingPage()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(150, 200)));
-                continue;
-            }
-
-            bool interrupted = false;
-
-            // 2. İç Kontrol: Skilleri basarken aniden F1-F8'e basıldı mı?
-            for (WORD skill : g_skills) {
-                if (!g_isMasterActive || !g_isCapsOn || g_exit) break;
-
-                // Skill vurulurken yakalanırsa anında kır (Sanal Durdurma)
-                if (IsUserChangingPage()) {
-                    interrupted = true;
-                    break;
-                }
-
-                // GÜNCELLEME: İnsansı skill basma süresi
-                SendKey(skill, GetRandomDelay(g_skillPressMs, g_skillPressMs + 12));
-
-                // GÜNCELLEME: Skill sonrası insansı bekleme (Sunucu Ping Toleransı)
-                std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(g_skillWaitMs, g_skillWaitMs + 15)));
-            }
-
-            if (interrupted || !g_isMasterActive || !g_isCapsOn || g_exit) {
-                if (interrupted) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(150, 220)));
-                }
-                continue;
-            }
-
-            // Kesinti olmadıysa komboya (R) devam et (Rastgele gecikmeler eklendi)
-            SendKey('R', GetRandomDelay(g_rPressMs, g_rPressMs + 10));
-            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(g_rWaitMs, g_rWaitMs + 20)));
-            SendKey('R', GetRandomDelay(g_rPressMs, g_rPressMs + 10));
-
-            // Ana döngü beklemesi de rastgeleleştirildi
-            SmartSleep(GetRandomDelay(g_delayMs, g_delayMs + 35));
-        }
-        else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-    }
+    m_hwnd = CreateWindowW(wc.lpszClassName, L"Pro Asas Macro - OOP", WS_POPUP | WS_VISIBLE, 150, 150, 280, 340, 0, 0, hInstance, 0); // DÜZELTİLDİ
+    return m_hwnd != NULL; // DÜZELTİLDİ
 }
 
-void HpThread() {
-    while (!g_exit) {
-        if (g_isMasterActive && (GetAsyncKeyState('F') & 0x8000)) {
-            SendKey(g_hpKey, GetRandomDelay(12, 25));
-            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(140, 180)));
-        }
-        else { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
-    }
-}
-
-void MpThread() {
-    while (!g_exit) {
-        if (g_isMasterActive && (GetAsyncKeyState(VK_XBUTTON1) & 0x8000)) {
-            SendKey(g_mpKey, GetRandomDelay(12, 25));
-            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(140, 180)));
-        }
-        else { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
-    }
-}
-
-void MinorThread() {
-    while (!g_exit) {
-        if (g_isMasterActive && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
-            SendKey(g_minorKey, GetRandomDelay(4, 10));
-            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(4, 10)));
-            SendKey(g_minorKey, GetRandomDelay(4, 10));
-            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(12, 25)));
-        }
-        else { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
-    }
-}
-
-// =========================================================
-// ARAYÜZ MİMARİSİ
-// =========================================================
-void ToggleMiniMode(HWND hwnd) {
+void UIManager::ToggleMiniMode() {
     g_isMiniMode = !g_isMiniMode;
     for (HWND h : g_normalControls) ShowWindow(h, g_isMiniMode ? SW_HIDE : SW_SHOW);
     for (HWND h : g_miniControls) ShowWindow(h, g_isMiniMode ? SW_SHOW : SW_HIDE);
 
-    if (g_isMiniMode) { SetWindowPos(hwnd, NULL, 0, 0, 260, 132, SWP_NOMOVE | SWP_NOZORDER); }
-    else { SetWindowPos(hwnd, NULL, 0, 0, 280, 340, SWP_NOMOVE | SWP_NOZORDER); }
-    InvalidateRect(hwnd, NULL, TRUE);
+    if (g_isMiniMode) { SetWindowPos(m_hwnd, NULL, 0, 0, 260, 132, SWP_NOMOVE | SWP_NOZORDER); } // DÜZELTİLDİ
+    else { SetWindowPos(m_hwnd, NULL, 0, 0, 280, 340, SWP_NOMOVE | SWP_NOZORDER); } // DÜZELTİLDİ
+    InvalidateRect(m_hwnd, NULL, TRUE); // DÜZELTİLDİ
 }
 
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+void UIManager::ReadAndApplySettings() {
+    wchar_t buf[10];
+    std::vector<WORD> skills;
+    for (int i = 0; i < 5; ++i) {
+        GetWindowTextW(g_hEdits[i], buf, 10);
+        if (wcslen(buf) > 0) skills.push_back(VkKeyScanW(buf[0]));
+    }
+    GetWindowTextW(g_hMsEdit, buf, 10); int delayMs = _wtoi(buf); if (delayMs < 50) delayMs = 50;
+    GetWindowTextW(g_hHpEdit, buf, 10); WORD hpKey = wcslen(buf) > 0 ? VkKeyScanW(buf[0]) : 0;
+    GetWindowTextW(g_hMpEdit, buf, 10); WORD mpKey = wcslen(buf) > 0 ? VkKeyScanW(buf[0]) : 0;
+    GetWindowTextW(g_hMinorEdit, buf, 10); WORD minorKey = wcslen(buf) > 0 ? VkKeyScanW(buf[0]) : 0;
+
+    GetWindowTextW(g_hSkillPressEdit, buf, 10); int sPress = _wtoi(buf); if (sPress < 1) sPress = 1;
+    GetWindowTextW(g_hSkillWaitEdit, buf, 10); int sWait = _wtoi(buf); if (sWait < 1) sWait = 1;
+    GetWindowTextW(g_hRPressEdit, buf, 10); int rPress = _wtoi(buf); if (rPress < 1) rPress = 1;
+    GetWindowTextW(g_hRWaitEdit, buf, 10); int rWait = _wtoi(buf); if (rWait < 1) rWait = 1;
+
+    m_engine.UpdateSettings(skills, delayMs, hpKey, mpKey, minorKey, sPress, sWait, rPress, rWait);
+}
+
+LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
         g_hbrMainBg = CreateSolidBrush(RGB(11, 15, 25));
@@ -247,7 +121,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         auto AddN = [&](HWND h) { g_normalControls.push_back(h); SendMessage(h, WM_SETFONT, (WPARAM)g_hFont, TRUE); return h; };
 
-        // --- NORMAL UI ---
         g_hTopTitle = AddN(CreateWindowW(L"STATIC", L"Pro Asas", WS_VISIBLE | WS_CHILD, 10, 8, 70, 20, hwnd, NULL, NULL, NULL));
         g_hTopBtn = AddN(CreateWindowW(L"BUTTON", L"USTTE: OFF", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 90, 5, 85, 24, hwnd, (HMENU)IDC_BTN_TOP, NULL, NULL));
         AddN(CreateWindowW(L"BUTTON", L"M", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 180, 5, 28, 24, hwnd, (HMENU)IDC_BTN_TOMINI, NULL, NULL));
@@ -298,7 +171,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SendMessage(g_hMasterBtn, WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
         SendMessage(g_hStatusLabel, WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
 
-        // --- MİNİ UI ---
         auto AddM = [&](HWND h) { g_miniControls.push_back(h); SendMessage(h, WM_SETFONT, (WPARAM)g_hFont, TRUE); return h; };
 
         g_hMiniTitle = AddM(CreateWindowW(L"STATIC", L"Assassin", WS_CHILD, 12, 11, 80, 20, hwnd, NULL, NULL, NULL));
@@ -313,7 +185,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SendMessage(g_hMiniList, WM_SETFONT, (WPARAM)g_hMiniListFont, TRUE);
 
         SetTimer(hwnd, 1, 100, NULL);
-        ReadSettings();
+        ReadAndApplySettings();
         break;
     }
     case WM_TIMER: {
@@ -323,7 +195,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SetWindowTextW(g_hStatusLabel, isCapsOn ? L"CAPSLOCK: AKTIF" : L"CAPSLOCK: KAPALI");
             if (!g_isMiniMode) InvalidateRect(g_hStatusLabel, NULL, TRUE);
         }
-        if (g_isMasterActive && g_isCapsOn) ReadSettings();
+        if (g_isMasterActive && g_isCapsOn) ReadAndApplySettings();
 
         if (g_isMiniMode) {
             auto now = std::chrono::system_clock::now();
@@ -428,43 +300,43 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     case WM_COMMAND: {
         int id = LOWORD(wParam);
-        if (id == IDC_BTN_MAST) { g_isMasterActive = !g_isMasterActive; SetWindowTextW(g_hMasterBtn, g_isMasterActive ? L"SISTEM: AKTIF (ACIK)" : L"SISTEM: PASIF (KAPALI)"); InvalidateRect(hwnd, NULL, FALSE); if (g_isMasterActive) g_sessionStartTime = std::chrono::system_clock::now(); }
-        else if (id == IDC_BTN_TOMINI || id == IDC_BTN_MINI_EXP) { ToggleMiniMode(hwnd); }
-        else if (id == IDC_BTN_MINI_ON) { g_isMasterActive = true; InvalidateRect(hwnd, NULL, FALSE); g_sessionStartTime = std::chrono::system_clock::now(); }
-        else if (id == IDC_BTN_MINI_OFF) { g_isMasterActive = false; InvalidateRect(hwnd, NULL, FALSE); }
+        if (id == IDC_BTN_MAST) {
+            g_isMasterActive = !g_isMasterActive;
+            m_engine.SetMasterActive(g_isMasterActive);
+            SetWindowTextW(g_hMasterBtn, g_isMasterActive ? L"SISTEM: AKTIF (ACIK)" : L"SISTEM: PASIF (KAPALI)");
+            InvalidateRect(hwnd, NULL, FALSE);
+            if (g_isMasterActive) g_sessionStartTime = std::chrono::system_clock::now();
+        }
+        else if (id == IDC_BTN_TOMINI || id == IDC_BTN_MINI_EXP) { ToggleMiniMode(); }
+        else if (id == IDC_BTN_MINI_ON) {
+            g_isMasterActive = true;
+            m_engine.SetMasterActive(true);
+            InvalidateRect(hwnd, NULL, FALSE);
+            g_sessionStartTime = std::chrono::system_clock::now();
+        }
+        else if (id == IDC_BTN_MINI_OFF) {
+            g_isMasterActive = false;
+            m_engine.SetMasterActive(false);
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
         else if (id == IDC_BTN_CLOSE) { DestroyWindow(hwnd); }
         else if (id == IDC_BTN_MIN) { ShowWindow(hwnd, SW_MINIMIZE); }
-        else if (id == IDC_BTN_TOP) { g_isTopMost = !g_isTopMost; SetWindowTextW(g_hTopBtn, g_isTopMost ? L"USTTE: ON" : L"USTTE: OFF"); SetWindowPos(hwnd, g_isTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE); InvalidateRect(g_hTopBtn, NULL, FALSE); }
-        if (HIWORD(wParam) == EN_CHANGE) { ReadSettings(); }
+        else if (id == IDC_BTN_TOP) {
+            g_isTopMost = !g_isTopMost;
+            SetWindowTextW(g_hTopBtn, g_isTopMost ? L"USTTE: ON" : L"USTTE: OFF");
+            SetWindowPos(hwnd, g_isTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            InvalidateRect(g_hTopBtn, NULL, FALSE);
+        }
+        if (HIWORD(wParam) == EN_CHANGE) { ReadAndApplySettings(); }
         break;
     }
     case WM_DESTROY: {
-        g_exit = true;
-        DeleteObject(g_hFont); DeleteObject(g_hBoldFont); DeleteObject(g_hMiniListFont);
-        DeleteObject(g_hbrMainBg); DeleteObject(g_hbrCardBg); DeleteObject(g_hbrBlack); DeleteObject(g_hbrTopBar); DeleteObject(g_hbrMiniBg); DeleteObject(g_hbrMiniListBg);
-        if (g_comboThread.joinable()) g_comboThread.join(); if (g_hpThread.joinable()) g_hpThread.join();
-        if (g_mpThread.joinable()) g_mpThread.join(); if (g_minorThread.joinable()) g_minorThread.join();
-        PostQuitMessage(0); break;
+        m_engine.Stop();
+        PostQuitMessage(0);
+        break;
     }
-    default: return DefWindowProcW(hwnd, msg, wParam, lParam);
+    default:
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
-    return 0;
-}
-
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
-    WNDCLASSW wc = { 0 };
-    wc.lpszClassName = L"AsasMacroV15";
-    wc.hInstance = hInstance;
-    wc.lpfnWndProc = WndProc;
-    wc.hCursor = LoadCursor(0, IDC_ARROW);
-    RegisterClassW(&wc);
-
-    CreateWindowW(wc.lpszClassName, L"Pro Asas Macro", WS_POPUP | WS_VISIBLE, 150, 150, 280, 340, 0, 0, hInstance, 0);
-
-    g_comboThread = std::thread(ComboThread); g_hpThread = std::thread(HpThread);
-    g_mpThread = std::thread(MpThread); g_minorThread = std::thread(MinorThread);
-
-    MSG msg = { 0 };
-    while (GetMessage(&msg, NULL, 0, 0)) { TranslateMessage(&msg); DispatchMessage(&msg); }
     return 0;
 }
