@@ -4,15 +4,17 @@
 #include <iomanip>
 #include <sstream>
 
-// Kontrol ID'leri
 #define IDC_BTN_TOP      101
 #define IDC_BTN_MAST     102
 #define IDC_BTN_TOMINI   103
 #define IDC_BTN_MIN      104
 #define IDC_BTN_CLOSE    105
+#define IDC_BTN_TAB_CLASSIC 106
+#define IDC_BTN_TAB_ASAS    107
 #define IDC_BTN_MINI_ON  401
 #define IDC_BTN_MINI_OFF 402
 #define IDC_BTN_MINI_EXP 403
+
 #define IDC_EDT_S1       201
 #define IDC_EDT_S2       202
 #define IDC_EDT_S3       203
@@ -30,9 +32,7 @@
 UIManager* g_pThis = nullptr;
 
 LRESULT CALLBACK GlobalWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (g_pThis) {
-        return g_pThis->HandleMessage(hwnd, msg, wParam, lParam);
-    }
+    if (g_pThis) { return g_pThis->HandleMessage(hwnd, msg, wParam, lParam); }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
@@ -43,14 +43,20 @@ UIManager::UIManager(MacroEngine& engine) : m_engine(engine) {
     g_isTopMost = false;
     g_isMasterActive = false;
     g_isCapsOn = false;
+    m_currentMode = CLASS_WARRIOR_BP;
+
     g_hFont = g_hBoldFont = g_hMiniListFont = NULL;
     g_hbrMainBg = g_hbrCardBg = g_hbrBlack = g_hbrTopBar = g_hbrMiniBg = g_hbrMiniListBg = NULL;
     g_hTopTitle = g_hTopBtn = g_hMasterBtn = g_hStatusLabel = NULL;
+    g_hTabClassic = g_hTabAsas = g_hAsasInfo = NULL;
     g_hMsEdit = g_hHpEdit = g_hMpEdit = g_hMinorEdit = NULL;
-    g_hHpPctEdit = g_hMpPctEdit = NULL; // Yüzdelik kutucukları
     g_hSkillPressEdit = g_hSkillWaitEdit = g_hRPressEdit = g_hRWaitEdit = NULL;
     g_hMiniTitle = g_hMiniList = g_hMiniTimer = NULL;
-    for (int i = 0; i < 5; ++i) g_hEdits[i] = NULL;
+
+    for (int i = 0; i < 5; ++i) {
+        g_hEdits[i] = NULL;
+        g_hSkillLabels[i] = NULL;
+    }
 }
 
 UIManager::~UIManager() {
@@ -73,17 +79,40 @@ bool UIManager::Initialize(HINSTANCE hInstance, int nCmdShow) {
     wc.hCursor = LoadCursor(0, IDC_ARROW);
     if (!RegisterClassW(&wc)) return false;
 
-    m_hwnd = CreateWindowW(wc.lpszClassName, L"Pro Asas Macro - OOP", WS_POPUP | WS_VISIBLE, 150, 150, 280, 340, 0, 0, hInstance, 0);
+    // YENİ: Pencere daha geniş ve uzun (Kutu çakışmalarını engellemek için)
+    m_hwnd = CreateWindowW(wc.lpszClassName, L"Pro Asas Macro", WS_POPUP | WS_VISIBLE, 150, 150, 290, 420, 0, 0, hInstance, 0);
     return m_hwnd != NULL;
 }
 
 void UIManager::ToggleMiniMode() {
     g_isMiniMode = !g_isMiniMode;
-    for (HWND h : g_normalControls) ShowWindow(h, g_isMiniMode ? SW_HIDE : SW_SHOW);
-    for (HWND h : g_miniControls) ShowWindow(h, g_isMiniMode ? SW_SHOW : SW_HIDE);
+
+    if (g_isMiniMode) {
+        for (HWND h : g_normalControls) ShowWindow(h, SW_HIDE);
+        for (HWND h : g_miniControls) ShowWindow(h, SW_SHOW);
+    }
+    else {
+        for (HWND h : g_normalControls) ShowWindow(h, SW_SHOW);
+        for (HWND h : g_miniControls) ShowWindow(h, SW_HIDE);
+        UpdateTabUI();
+    }
 
     if (g_isMiniMode) { SetWindowPos(m_hwnd, NULL, 0, 0, 260, 132, SWP_NOMOVE | SWP_NOZORDER); }
-    else { SetWindowPos(m_hwnd, NULL, 0, 0, 280, 340, SWP_NOMOVE | SWP_NOZORDER); }
+    else { SetWindowPos(m_hwnd, NULL, 0, 0, 290, 420, SWP_NOMOVE | SWP_NOZORDER); }
+    InvalidateRect(m_hwnd, NULL, TRUE);
+}
+
+void UIManager::UpdateTabUI() {
+    if (g_isMiniMode) return;
+
+    bool isClassic = (m_currentMode == CLASS_WARRIOR_BP);
+
+    for (int i = 0; i < 5; ++i) {
+        ShowWindow(g_hEdits[i], isClassic ? SW_SHOW : SW_HIDE);
+        ShowWindow(g_hSkillLabels[i], isClassic ? SW_SHOW : SW_HIDE);
+    }
+
+    ShowWindow(g_hAsasInfo, isClassic ? SW_HIDE : SW_SHOW);
     InvalidateRect(m_hwnd, NULL, TRUE);
 }
 
@@ -104,15 +133,7 @@ void UIManager::ReadAndApplySettings() {
     GetWindowTextW(g_hRPressEdit, buf, 10); int rPress = _wtoi(buf); if (rPress < 1) rPress = 1;
     GetWindowTextW(g_hRWaitEdit, buf, 10); int rWait = _wtoi(buf); if (rWait < 1) rWait = 1;
 
-    // Yüzdelik limitleri oku ve 1 ile 99 arasında sınırla
-    GetWindowTextW(g_hHpPctEdit, buf, 10); int hpLimit = _wtoi(buf);
-    if (hpLimit < 1) hpLimit = 1; else if (hpLimit > 99) hpLimit = 99;
-
-    GetWindowTextW(g_hMpPctEdit, buf, 10); int mpLimit = _wtoi(buf);
-    if (mpLimit < 1) mpLimit = 1; else if (mpLimit > 99) mpLimit = 99;
-
     m_engine.UpdateSettings(skills, delayMs, hpKey, mpKey, minorKey, sPress, sWait, rPress, rWait);
-    m_engine.SetLimits(hpLimit, mpLimit);
 }
 
 LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -131,64 +152,68 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
         auto AddN = [&](HWND h) { g_normalControls.push_back(h); SendMessage(h, WM_SETFONT, (WPARAM)g_hFont, TRUE); return h; };
 
-        g_hTopTitle = AddN(CreateWindowW(L"STATIC", L"Pro Asas", WS_VISIBLE | WS_CHILD, 10, 8, 70, 20, hwnd, NULL, NULL, NULL));
-        g_hTopBtn = AddN(CreateWindowW(L"BUTTON", L"USTTE: OFF", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 90, 5, 85, 24, hwnd, (HMENU)IDC_BTN_TOP, NULL, NULL));
-        AddN(CreateWindowW(L"BUTTON", L"M", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 180, 5, 28, 24, hwnd, (HMENU)IDC_BTN_TOMINI, NULL, NULL));
-        AddN(CreateWindowW(L"BUTTON", L"\x2014", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 212, 5, 28, 24, hwnd, (HMENU)IDC_BTN_MIN, NULL, NULL));
-        AddN(CreateWindowW(L"BUTTON", L"\x2715", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 244, 5, 28, 24, hwnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL));
+        // Üst Bar Butonları (Hizalamalar güncellendi)
+        g_hTopTitle = AddN(CreateWindowW(L"STATIC", L"Pro Macro", WS_VISIBLE | WS_CHILD, 10, 8, 75, 20, hwnd, NULL, NULL, NULL));
+        g_hTopBtn = AddN(CreateWindowW(L"BUTTON", L"USTTE: OFF", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 95, 5, 85, 24, hwnd, (HMENU)IDC_BTN_TOP, NULL, NULL));
+        AddN(CreateWindowW(L"BUTTON", L"M", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 190, 5, 28, 24, hwnd, (HMENU)IDC_BTN_TOMINI, NULL, NULL));
+        AddN(CreateWindowW(L"BUTTON", L"\x2014", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 222, 5, 28, 24, hwnd, (HMENU)IDC_BTN_MIN, NULL, NULL));
+        AddN(CreateWindowW(L"BUTTON", L"\x2715", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 254, 5, 28, 24, hwnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL));
 
-        int lX = 15, lEX = 65, stY = 45, stp = 26;
-        AddN(CreateWindowW(L"STATIC", L"Skill 1:", WS_VISIBLE | WS_CHILD, lX, stY, 50, 22, hwnd, NULL, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"Skill 2:", WS_VISIBLE | WS_CHILD, lX, stY + stp, 50, 22, hwnd, NULL, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"Skill 3:", WS_VISIBLE | WS_CHILD, lX, stY + stp * 2, 50, 22, hwnd, NULL, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"Skill 4:", WS_VISIBLE | WS_CHILD, lX, stY + stp * 3, 50, 22, hwnd, NULL, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"Skill 5:", WS_VISIBLE | WS_CHILD, lX, stY + stp * 4, 50, 22, hwnd, NULL, NULL, NULL));
+        // Sekmeler (Ortalandı)
+        g_hTabClassic = AddN(CreateWindowW(L"BUTTON", L"Klasik (Warr/BP)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 15, 40, 125, 25, hwnd, (HMENU)IDC_BTN_TAB_CLASSIC, NULL, NULL));
+        g_hTabAsas = AddN(CreateWindowW(L"BUTTON", L"Pro Asas (Akilli)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 150, 40, 125, 25, hwnd, (HMENU)IDC_BTN_TAB_ASAS, NULL, NULL));
 
-        g_hEdits[0] = AddN(CreateWindowW(L"EDIT", L"3", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S1, NULL, NULL));
-        g_hEdits[1] = AddN(CreateWindowW(L"EDIT", L"4", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S2, NULL, NULL));
-        g_hEdits[2] = AddN(CreateWindowW(L"EDIT", L"5", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 2 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S3, NULL, NULL));
-        g_hEdits[3] = AddN(CreateWindowW(L"EDIT", L"6", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 3 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S4, NULL, NULL));
-        g_hEdits[4] = AddN(CreateWindowW(L"EDIT", L"7", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 4 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S5, NULL, NULL));
+        int lX = 15, lEX = 65, stY = 80, stp = 27;
 
-        // --- SAĞ TARAF (Kompakt ve Şık Tasarım) ---
-        int rX = 115;
+        // Klasik Mod Labelleri
+        g_hSkillLabels[0] = AddN(CreateWindowW(L"STATIC", L"Skill 1:", WS_CHILD, lX, stY, 50, 22, hwnd, NULL, NULL, NULL));
+        g_hSkillLabels[1] = AddN(CreateWindowW(L"STATIC", L"Skill 2:", WS_CHILD, lX, stY + stp, 50, 22, hwnd, NULL, NULL, NULL));
+        g_hSkillLabels[2] = AddN(CreateWindowW(L"STATIC", L"Skill 3:", WS_CHILD, lX, stY + stp * 2, 50, 22, hwnd, NULL, NULL, NULL));
+        g_hSkillLabels[3] = AddN(CreateWindowW(L"STATIC", L"Skill 4:", WS_CHILD, lX, stY + stp * 3, 50, 22, hwnd, NULL, NULL, NULL));
+        g_hSkillLabels[4] = AddN(CreateWindowW(L"STATIC", L"Skill 5:", WS_CHILD, lX, stY + stp * 4, 50, 22, hwnd, NULL, NULL, NULL));
 
-        // HP Satırı
-        AddN(CreateWindowW(L"STATIC", L"HP:", WS_VISIBLE | WS_CHILD, rX, stY, 30, 22, hwnd, NULL, NULL, NULL));
-        g_hHpEdit = AddN(CreateWindowW(L"EDIT", L"8", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 30, stY - 2, 20, 22, hwnd, (HMENU)IDC_EDT_HP, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"%", WS_VISIBLE | WS_CHILD, rX + 55, stY, 15, 22, hwnd, NULL, NULL, NULL));
-        g_hHpPctEdit = AddN(CreateWindowW(L"EDIT", L"50", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 70, stY - 2, 30, 22, hwnd, (HMENU)214, NULL, NULL));
-        AddN(CreateWindowW(L"BUTTON", L"Sec", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, rX + 105, stY - 2, 40, 22, hwnd, (HMENU)998, NULL, NULL));
+        // Klasik Mod Kutuları
+        g_hEdits[0] = AddN(CreateWindowW(L"EDIT", L"3", WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S1, NULL, NULL));
+        g_hEdits[1] = AddN(CreateWindowW(L"EDIT", L"4", WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S2, NULL, NULL));
+        g_hEdits[2] = AddN(CreateWindowW(L"EDIT", L"5", WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 2 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S3, NULL, NULL));
+        g_hEdits[3] = AddN(CreateWindowW(L"EDIT", L"6", WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 3 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S4, NULL, NULL));
+        g_hEdits[4] = AddN(CreateWindowW(L"EDIT", L"7", WS_CHILD | WS_BORDER | ES_CENTER, lEX, stY + stp * 4 - 2, 40, 22, hwnd, (HMENU)IDC_EDT_S5, NULL, NULL));
 
-        // MP Satırı
-        AddN(CreateWindowW(L"STATIC", L"MP:", WS_VISIBLE | WS_CHILD, rX, stY + stp, 30, 22, hwnd, NULL, NULL, NULL));
-        g_hMpEdit = AddN(CreateWindowW(L"EDIT", L"9", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 30, stY + stp - 2, 20, 22, hwnd, (HMENU)IDC_EDT_MP, NULL, NULL));
-        AddN(CreateWindowW(L"STATIC", L"%", WS_VISIBLE | WS_CHILD, rX + 55, stY + stp, 15, 22, hwnd, NULL, NULL, NULL));
-        g_hMpPctEdit = AddN(CreateWindowW(L"EDIT", L"50", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 70, stY + stp - 2, 30, 22, hwnd, (HMENU)215, NULL, NULL));
-        AddN(CreateWindowW(L"BUTTON", L"Sec", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, rX + 105, stY + stp - 2, 40, 22, hwnd, (HMENU)999, NULL, NULL));
+        // YENİ: Asas Bilgi Panosu (İngilizce karakterler, şık hizalama)
+        g_hAsasInfo = AddN(CreateWindowW(L"STATIC",
+            L"- ASAS PROFILI -\n\n[F1] ANA HASAR\n3:Spike   4:Thrust\n5:Beast   6:Cut\n7:Pierce\n\n[F2] SERI HASAR\n3:Shock   4:Jab\n5:Stab2   6:Stab\n7:Cut",
+            WS_CHILD, lX, stY, 110, 150, hwnd, NULL, NULL, NULL));
+        SendMessage(g_hAsasInfo, WM_SETFONT, (WPARAM)g_hMiniListFont, TRUE);
 
-        // Minor ve Hız Satırları
-        AddN(CreateWindowW(L"STATIC", L"Minor (X2):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 2, 70, 22, hwnd, NULL, NULL, NULL));
-        g_hMinorEdit = AddN(CreateWindowW(L"EDIT", L"0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 75, stY + stp * 2 - 2, 25, 22, hwnd, (HMENU)IDC_EDT_MIN, NULL, NULL));
+        // Sağ Taraf Ayarları (Genişlikler artırıldı, taşmalar önlendi)
+        int rX = 130, rEX = 215;
+        AddN(CreateWindowW(L"STATIC", L"HP (F):", WS_VISIBLE | WS_CHILD, rX, stY, 80, 22, hwnd, NULL, NULL, NULL));
+        AddN(CreateWindowW(L"STATIC", L"MP (MSX1):", WS_VISIBLE | WS_CHILD, rX, stY + stp, 80, 22, hwnd, NULL, NULL, NULL));
+        AddN(CreateWindowW(L"STATIC", L"Minor(M2):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 2, 80, 22, hwnd, NULL, NULL, NULL));
+        AddN(CreateWindowW(L"STATIC", L"Hiz (ms):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 3, 80, 22, hwnd, NULL, NULL, NULL));
 
-        AddN(CreateWindowW(L"STATIC", L"Hiz (ms):", WS_VISIBLE | WS_CHILD, rX, stY + stp * 3, 70, 22, hwnd, NULL, NULL, NULL));
-        g_hMsEdit = AddN(CreateWindowW(L"EDIT", L"350", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rX + 75, stY + stp * 3 - 2, 35, 22, hwnd, (HMENU)IDC_EDT_MS, NULL, NULL));
+        g_hHpEdit = AddN(CreateWindowW(L"EDIT", L"8", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY - 2, 45, 22, hwnd, (HMENU)IDC_EDT_HP, NULL, NULL));
+        g_hMpEdit = AddN(CreateWindowW(L"EDIT", L"9", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY + stp - 2, 45, 22, hwnd, (HMENU)IDC_EDT_MP, NULL, NULL));
+        g_hMinorEdit = AddN(CreateWindowW(L"EDIT", L"0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY + stp * 2 - 2, 45, 22, hwnd, (HMENU)IDC_EDT_MIN, NULL, NULL));
+        g_hMsEdit = AddN(CreateWindowW(L"EDIT", L"350", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, rEX, stY + stp * 3 - 2, 45, 22, hwnd, (HMENU)IDC_EDT_MS, NULL, NULL));
 
-        int advY = 180;
+        // İnce Ayar Kutuları (Daha aşağı alındı, simetrik yapıldı)
+        int advY = 230;
         AddN(CreateWindowW(L"STATIC", L"Skill Bas:", WS_VISIBLE | WS_CHILD, 15, advY, 65, 20, hwnd, NULL, NULL, NULL));
-        g_hSkillPressEdit = AddN(CreateWindowW(L"EDIT", L"25", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 80, advY - 2, 35, 22, hwnd, (HMENU)IDC_EDT_SK_P, NULL, NULL));
+        g_hSkillPressEdit = AddN(CreateWindowW(L"EDIT", L"25", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 85, advY - 2, 40, 22, hwnd, (HMENU)IDC_EDT_SK_P, NULL, NULL));
 
-        AddN(CreateWindowW(L"STATIC", L"Skill Bek:", WS_VISIBLE | WS_CHILD, 125, advY, 65, 20, hwnd, NULL, NULL, NULL));
-        g_hSkillWaitEdit = AddN(CreateWindowW(L"EDIT", L"5", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 195, advY - 2, 35, 22, hwnd, (HMENU)IDC_EDT_SK_W, NULL, NULL));
+        AddN(CreateWindowW(L"STATIC", L"Skill Bek:", WS_VISIBLE | WS_CHILD, 135, advY, 65, 20, hwnd, NULL, NULL, NULL));
+        g_hSkillWaitEdit = AddN(CreateWindowW(L"EDIT", L"5", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 205, advY - 2, 40, 22, hwnd, (HMENU)IDC_EDT_SK_W, NULL, NULL));
 
         AddN(CreateWindowW(L"STATIC", L"R Bas:", WS_VISIBLE | WS_CHILD, 15, advY + stp, 65, 20, hwnd, NULL, NULL, NULL));
-        g_hRPressEdit = AddN(CreateWindowW(L"EDIT", L"20", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 80, advY + stp - 2, 35, 22, hwnd, (HMENU)IDC_EDT_R_P, NULL, NULL));
+        g_hRPressEdit = AddN(CreateWindowW(L"EDIT", L"20", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 85, advY + stp - 2, 40, 22, hwnd, (HMENU)IDC_EDT_R_P, NULL, NULL));
 
-        AddN(CreateWindowW(L"STATIC", L"R Bek:", WS_VISIBLE | WS_CHILD, 125, advY + stp, 65, 20, hwnd, NULL, NULL, NULL));
-        g_hRWaitEdit = AddN(CreateWindowW(L"EDIT", L"20", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 195, advY + stp - 2, 35, 22, hwnd, (HMENU)IDC_EDT_R_W, NULL, NULL));
+        AddN(CreateWindowW(L"STATIC", L"R Bek:", WS_VISIBLE | WS_CHILD, 135, advY + stp, 65, 20, hwnd, NULL, NULL, NULL));
+        g_hRWaitEdit = AddN(CreateWindowW(L"EDIT", L"20", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 205, advY + stp - 2, 40, 22, hwnd, (HMENU)IDC_EDT_R_W, NULL, NULL));
 
-        g_hMasterBtn = AddN(CreateWindowW(L"BUTTON", L"SISTEM: PASIF (KAPALI)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 15, 245, 250, 40, hwnd, (HMENU)IDC_BTN_MAST, NULL, NULL));
-        g_hStatusLabel = AddN(CreateWindowW(L"STATIC", L"CAPSLOCK: KAPALI", WS_VISIBLE | WS_CHILD | SS_CENTER, 15, 295, 250, 20, hwnd, NULL, NULL, NULL));
+        // Ana Butonlar
+        g_hMasterBtn = AddN(CreateWindowW(L"BUTTON", L"SISTEM: PASIF (KAPALI)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 15, 300, 260, 40, hwnd, (HMENU)IDC_BTN_MAST, NULL, NULL));
+        g_hStatusLabel = AddN(CreateWindowW(L"STATIC", L"CAPSLOCK: KAPALI", WS_VISIBLE | WS_CHILD | SS_CENTER, 15, 350, 260, 20, hwnd, NULL, NULL, NULL));
 
         SendMessage(g_hTopTitle, WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
         SendMessage(g_hMasterBtn, WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
@@ -196,7 +221,7 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
         auto AddM = [&](HWND h) { g_miniControls.push_back(h); SendMessage(h, WM_SETFONT, (WPARAM)g_hFont, TRUE); return h; };
 
-        g_hMiniTitle = AddM(CreateWindowW(L"STATIC", L"Assassin", WS_CHILD, 12, 11, 80, 20, hwnd, NULL, NULL, NULL));
+        g_hMiniTitle = AddM(CreateWindowW(L"STATIC", L"Macro", WS_CHILD, 12, 11, 80, 20, hwnd, NULL, NULL, NULL));
         AddM(CreateWindowW(L"BUTTON", L"\x25B6 ON", WS_CHILD | BS_OWNERDRAW, 116, 8, 50, 24, hwnd, (HMENU)IDC_BTN_MINI_ON, NULL, NULL));
         AddM(CreateWindowW(L"BUTTON", L"\x25A0 OFF", WS_CHILD | BS_OWNERDRAW, 170, 8, 50, 24, hwnd, (HMENU)IDC_BTN_MINI_OFF, NULL, NULL));
         AddM(CreateWindowW(L"BUTTON", L"\x25BC", WS_CHILD | BS_OWNERDRAW, 224, 8, 24, 24, hwnd, (HMENU)IDC_BTN_MINI_EXP, NULL, NULL));
@@ -209,6 +234,7 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
         SetTimer(hwnd, 1, 100, NULL);
         ReadAndApplySettings();
+        UpdateTabUI();
         break;
     }
     case WM_TIMER: {
@@ -281,14 +307,21 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             COLORREF bgCol = RGB(31, 41, 55);
             COLORREF textCol = RGB(255, 255, 255);
 
-            if (id == IDC_BTN_MINI_ON) { bgCol = RGB(16, 185, 129); }
+            if (id == IDC_BTN_TAB_CLASSIC) {
+                bgCol = (m_currentMode == CLASS_WARRIOR_BP) ? RGB(16, 185, 129) : RGB(31, 41, 55);
+                textCol = (m_currentMode == CLASS_WARRIOR_BP) ? RGB(255, 255, 255) : RGB(150, 150, 150);
+            }
+            else if (id == IDC_BTN_TAB_ASAS) {
+                bgCol = (m_currentMode == CLASS_ASAS) ? RGB(16, 185, 129) : RGB(31, 41, 55);
+                textCol = (m_currentMode == CLASS_ASAS) ? RGB(255, 255, 255) : RGB(150, 150, 150);
+            }
+            else if (id == IDC_BTN_MINI_ON) { bgCol = RGB(16, 185, 129); }
             else if (id == IDC_BTN_MINI_OFF) { bgCol = RGB(239, 68, 68); }
             else if (id == IDC_BTN_TOMINI || id == IDC_BTN_MINI_EXP) { bgCol = RGB(245, 158, 11); textCol = RGB(11, 15, 25); }
             else if (id == IDC_BTN_MAST) { bgCol = g_isMasterActive ? RGB(16, 185, 129) : RGB(239, 68, 68); }
             else if (id == IDC_BTN_TOP) { bgCol = g_isTopMost ? RGB(245, 158, 11) : RGB(31, 41, 55); textCol = g_isTopMost ? RGB(11, 15, 25) : RGB(255, 255, 255); }
             else if (id == IDC_BTN_CLOSE) { bgCol = RGB(239, 68, 68); }
             else if (id == IDC_BTN_MIN) { bgCol = RGB(31, 41, 55); }
-            else if (id == 998 || id == 999) { bgCol = RGB(55, 65, 81); textCol = RGB(255, 255, 255); } // SEC butonları için şık koyu renk
 
             HBRUSH hbr = CreateSolidBrush(bgCol); FillRect(hdc, &rect, hbr); DeleteObject(hbr);
             HBRUSH hbrBorder = CreateSolidBrush(RGB(60, 70, 90)); FrameRect(hdc, &rect, hbrBorder); DeleteObject(hbrBorder);
@@ -317,14 +350,30 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             SetBkColor(hdc, RGB(15, 20, 30)); return (LRESULT)g_hbrMiniBg;
         }
         else {
-            if (hCtrl == g_hTopTitle) { SetTextColor(hdc, RGB(200, 200, 205)); SetBkColor(hdc, RGB(15, 20, 30)); return (LRESULT)g_hbrTopBar; }
+            if (hCtrl == g_hAsasInfo) {
+                SetTextColor(hdc, RGB(56, 189, 248));
+                SetBkColor(hdc, RGB(11, 15, 25));
+                return (LRESULT)g_hbrMainBg;
+            }
+            else if (hCtrl == g_hTopTitle) { SetTextColor(hdc, RGB(200, 200, 205)); SetBkColor(hdc, RGB(15, 20, 30)); return (LRESULT)g_hbrTopBar; }
             else if (hCtrl == g_hStatusLabel) { SetBkColor(hdc, RGB(11, 15, 25)); SetTextColor(hdc, (g_isMasterActive && g_isCapsOn) ? RGB(16, 185, 129) : RGB(239, 68, 68)); return (LRESULT)g_hbrMainBg; }
             else { SetBkColor(hdc, RGB(11, 15, 25)); SetTextColor(hdc, RGB(255, 255, 255)); return (LRESULT)g_hbrMainBg; }
         }
     }
     case WM_COMMAND: {
         int id = LOWORD(wParam);
-        if (id == IDC_BTN_MAST) {
+
+        if (id == IDC_BTN_TAB_CLASSIC) {
+            m_currentMode = CLASS_WARRIOR_BP;
+            m_engine.SetClassMode(m_currentMode);
+            UpdateTabUI();
+        }
+        else if (id == IDC_BTN_TAB_ASAS) {
+            m_currentMode = CLASS_ASAS;
+            m_engine.SetClassMode(m_currentMode);
+            UpdateTabUI();
+        }
+        else if (id == IDC_BTN_MAST) {
             g_isMasterActive = !g_isMasterActive;
             m_engine.SetMasterActive(g_isMasterActive);
             SetWindowTextW(g_hMasterBtn, g_isMasterActive ? L"SISTEM: AKTIF (ACIK)" : L"SISTEM: PASIF (KAPALI)");
@@ -345,30 +394,6 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
         else if (id == IDC_BTN_CLOSE) { DestroyWindow(hwnd); }
         else if (id == IDC_BTN_MIN) { ShowWindow(hwnd, SW_MINIMIZE); }
-        else if (id == 998 || id == 999) {
-            RECT secim = RegionSelector::SelectRegion();
-
-            if (secim.right > secim.left && secim.bottom > secim.top) {
-                int width = secim.right - secim.left;
-                int height = secim.bottom - secim.top;
-                int targetX = secim.left + (width / 2);
-                int targetY = secim.top + (height / 4);
-
-                // O anki seçilen yerin orijinal rengini OpenCV ile hemen okuyoruz
-                ScreenScanner tempScanner;
-                cv::Mat m = tempScanner.CaptureScreen(targetX, targetY, 1, 1);
-                COLORREF pickedColor = RGB(0, 0, 0);
-                if (!m.empty()) {
-                    cv::Vec4b px = m.at<cv::Vec4b>(0, 0);
-                    pickedColor = RGB(px[2], px[1], px[0]); // R, G, B
-                }
-
-                if (id == 998) m_engine.SetHpRect(secim, pickedColor);
-                else m_engine.SetMpRect(secim, pickedColor);
-
-                MessageBeep(MB_OK);
-            }
-        }
         else if (id == IDC_BTN_TOP) {
             g_isTopMost = !g_isTopMost;
             SetWindowTextW(g_hTopBtn, g_isTopMost ? L"USTTE: ON" : L"USTTE: OFF");

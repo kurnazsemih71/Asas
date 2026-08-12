@@ -1,7 +1,7 @@
 {
     "Version": "1.2",
     "Data": {
-        "Source": "c:\\users\\semih\\source\\repos\\asas\\screenscanner.h",
+        "Source": "c:\\users\\semih\\desktop\\asas\\screenscanner.h",
         "ProvidedModule": "",
         "Includes": [
             "c:\\program files (x86)\\windows kits\\10\\include\\10.0.28000.0\\um\\windows.h",

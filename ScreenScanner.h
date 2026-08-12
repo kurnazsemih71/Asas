@@ -20,6 +20,4 @@ public:
     // HP (Kırmızı) veya MP (Mavi) barlarının azalıp azalmadığını kontrol eder
     // colorType: 0 = Kırmızı(HP), 1 = Mavi(MP)
     bool IsBarLow(int x, int y, int colorType, int threshold = 50);
-    // Dikey bir sütunu boydan boya tarayıp, içinde hiç gerçek can/mana rengi kalmamışsa True döner
-    bool IsColumnLow(int targetX, int topY, int bottomY, int colorType);
 };

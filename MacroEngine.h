@@ -5,22 +5,15 @@
 #include <thread>
 #include <mutex>
 #include <random>
-#include "ScreenScanner.h"
+#include <chrono>
+
+enum MacroClassMode {
+    CLASS_WARRIOR_BP = 0,
+    CLASS_ASAS = 1
+};
 
 class MacroEngine {
 private:
-    ScreenScanner m_scanner; // OpenCV Göz objesi
-
-    // Yüzdelik okuma için tüm barın alanını ve limitini tutan değişkenler
-    RECT g_hpRect = { 0 };
-    RECT g_mpRect = { 0 };
-    int g_hpLimit = 50;
-    int g_mpLimit = 50;
-
-    // YENİ: Seçilen alanın orijinal renklerini hafızada tutacağız
-    COLORREF g_originalHpColor = RGB(0, 0, 0);
-    COLORREF g_originalMpColor = RGB(0, 0, 0);
-
     bool g_exit;
     bool g_isMasterActive;
     bool g_isCapsOn;
@@ -31,17 +24,19 @@ private:
     std::thread g_minorThread;
     std::mutex g_inputMutex;
 
-    // Ayarlar
     std::vector<WORD> g_skills;
     int g_delayMs;
     WORD g_hpKey, g_mpKey, g_minorKey;
     int g_skillPressMs, g_skillWaitMs, g_rPressMs, g_rWaitMs;
+
+    MacroClassMode m_classMode;
 
     int GetRandomDelay(int minDelay, int maxDelay);
     void SendKey(WORD keyCode, int pressDelay);
     bool IsUserChangingPage();
     bool SmartSleep(int totalMs);
 
+    // İki motoru tek bir akıllı motorda birleştirdik
     void ComboLoop();
     void HpLoop();
     void MpLoop();
@@ -56,14 +51,6 @@ public:
     void SetMasterActive(bool active);
     bool IsMasterActive() const;
 
-    // Ayarları dışarıdan güncellemek için
+    void SetClassMode(MacroClassMode mode);
     void UpdateSettings(const std::vector<WORD>& skills, int delay, WORD hp, WORD mp, WORD minor, int sPress, int sWait, int rPress, int rWait);
-
-    // OpenCV Koordinat ve Yüzdelik limit atama fonksiyonları
-    void SetHpRect(RECT r);
-    void SetMpRect(RECT r);
-    void SetLimits(int hpLimit, int mpLimit);
-
-    void SetHpRect(RECT r, COLORREF c);
-    void SetMpRect(RECT r, COLORREF c);
 };
