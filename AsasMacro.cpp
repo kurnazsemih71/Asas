@@ -1,5 +1,5 @@
 // ==== AsasMacro_Pro_v15_Precision.cpp ====
-// Hassas Milisaniye Kontrollü, Piksel Kusursuzluğunda Mimari (F1-F8 Sayfa Korumalı)
+// Hassas Milisaniye Kontrollü, Piksel Kusursuzluğunda Mimari (F1-F8 Sayfa Korumalı + Ping Toleranslı)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <string>
@@ -10,6 +10,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <random> // Rastgele sayı (Ping Toleransı) kütüphanesi eklendi
 
 // --- Global Değişkenler ---
 bool g_exit = false;
@@ -67,6 +68,16 @@ int g_rPressMs = 20;
 int g_rWaitMs = 20;
 
 // =========================================================
+// RASTGELE GECİKME ÜRETİCİ (PING TOLERANSI)
+// =========================================================
+int GetRandomDelay(int minDelay, int maxDelay) {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distr(minDelay, maxDelay);
+    return distr(gen);
+}
+
+// =========================================================
 // DONANIM SEVİYESİ TUŞ BASMA & DÖNGÜLER
 // =========================================================
 void SendKey(WORD keyCode, int pressDelay = 15) {
@@ -78,7 +89,10 @@ void SendKey(WORD keyCode, int pressDelay = 15) {
     input.ki.wVk = 0;
     input.ki.dwFlags = KEYEVENTF_SCANCODE;
     SendInput(1, &input, sizeof(INPUT));
+
+    // Tuşa basılı tutma süresi de rastgelelik içerir
     std::this_thread::sleep_for(std::chrono::milliseconds(pressDelay));
+
     input.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
     SendInput(1, &input, sizeof(INPUT));
 }
@@ -121,16 +135,15 @@ bool SmartSleep(int totalMs) {
     return false;
 }
 
-// GÜNCELLENDİ: Otomatik "Durdur-Başlat" Mantığı Entegre Edildi
+// GÜNCELLENDİ: Otomatik "Durdur-Başlat" ve "Rastgele Gecikme" Mantığı Entegre Edildi
 void ComboThread() {
     while (!g_exit) {
         if (g_isMasterActive && g_isCapsOn) {
 
             // 1. Dış Kontrol: Yeni bir döngüye girmeden önce F1-F8'e basıldı mı?
             if (IsUserChangingPage()) {
-                // Oyunun sayfayı çevirmesi için kısa bir nefes aldır (Sanal Durdurma)
-                std::this_thread::sleep_for(std::chrono::milliseconds(150));
-                continue; // Komboyu 1. skillden tekrar başlat
+                std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(150, 200)));
+                continue;
             }
 
             bool interrupted = false;
@@ -145,24 +158,27 @@ void ComboThread() {
                     break;
                 }
 
-                SendKey(skill, g_skillPressMs);
-                std::this_thread::sleep_for(std::chrono::milliseconds(g_skillWaitMs));
+                // GÜNCELLEME: İnsansı skill basma süresi
+                SendKey(skill, GetRandomDelay(g_skillPressMs, g_skillPressMs + 12));
+
+                // GÜNCELLEME: Skill sonrası insansı bekleme (Sunucu Ping Toleransı)
+                std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(g_skillWaitMs, g_skillWaitMs + 15)));
             }
 
-            // Eğer F tuşları yüzünden döngü kırıldıysa, makroyu başa sar (Sanal Başlatma)
             if (interrupted || !g_isMasterActive || !g_isCapsOn || g_exit) {
                 if (interrupted) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(150, 220)));
                 }
                 continue;
             }
 
-            // Kesinti olmadıysa komboya (R) devam et
-            SendKey('R', g_rPressMs);
-            std::this_thread::sleep_for(std::chrono::milliseconds(g_rWaitMs));
-            SendKey('R', g_rPressMs);
+            // Kesinti olmadıysa komboya (R) devam et (Rastgele gecikmeler eklendi)
+            SendKey('R', GetRandomDelay(g_rPressMs, g_rPressMs + 10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(g_rWaitMs, g_rWaitMs + 20)));
+            SendKey('R', GetRandomDelay(g_rPressMs, g_rPressMs + 10));
 
-            SmartSleep(g_delayMs);
+            // Ana döngü beklemesi de rastgeleleştirildi
+            SmartSleep(GetRandomDelay(g_delayMs, g_delayMs + 35));
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -172,22 +188,32 @@ void ComboThread() {
 
 void HpThread() {
     while (!g_exit) {
-        if (g_isMasterActive && (GetAsyncKeyState('F') & 0x8000)) { SendKey(g_hpKey, 15); std::this_thread::sleep_for(std::chrono::milliseconds(150)); }
+        if (g_isMasterActive && (GetAsyncKeyState('F') & 0x8000)) {
+            SendKey(g_hpKey, GetRandomDelay(12, 25));
+            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(140, 180)));
+        }
         else { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
     }
 }
 
 void MpThread() {
     while (!g_exit) {
-        if (g_isMasterActive && (GetAsyncKeyState(VK_XBUTTON1) & 0x8000)) { SendKey(g_mpKey, 15); std::this_thread::sleep_for(std::chrono::milliseconds(150)); }
+        if (g_isMasterActive && (GetAsyncKeyState(VK_XBUTTON1) & 0x8000)) {
+            SendKey(g_mpKey, GetRandomDelay(12, 25));
+            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(140, 180)));
+        }
         else { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
     }
 }
 
 void MinorThread() {
-    UINT vkMinor = MapVirtualKeyW(0x29, MAPVK_VSC_TO_VK);
     while (!g_exit) {
-        if (g_isMasterActive && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) { SendKey(g_minorKey, 5); std::this_thread::sleep_for(std::chrono::milliseconds(5)); SendKey(g_minorKey, 5); std::this_thread::sleep_for(std::chrono::milliseconds(15)); }
+        if (g_isMasterActive && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
+            SendKey(g_minorKey, GetRandomDelay(4, 10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(4, 10)));
+            SendKey(g_minorKey, GetRandomDelay(4, 10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(GetRandomDelay(12, 25)));
+        }
         else { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
     }
 }
