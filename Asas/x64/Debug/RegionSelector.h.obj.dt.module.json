@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "Asas\\x64\\Debug\\RegionSelector.obj",
+            "outputs": [
+                "Asas\\x64\\Debug\\RegionSelector.h.obj.dt.module.json",
+                "Asas\\x64\\Debug\\RegionSelector.h.obj.dt.d.json"
+            ],
+            "requires": []
+        }
+    ]
+}

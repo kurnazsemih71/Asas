@@ -147,11 +147,13 @@
   <ItemGroup>
     <ClCompile Include="MacroEngine.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="RegionSelector.cpp" />
     <ClCompile Include="ScreenScanner.cpp" />
     <ClCompile Include="UIManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MacroEngine.h" />
+    <ClInclude Include="RegionSelector.h" />
     <ClInclude Include="ScreenScanner.h" />
     <ClInclude Include="UIManager.h" />
   </ItemGroup>

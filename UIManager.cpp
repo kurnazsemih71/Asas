@@ -1,4 +1,5 @@
 #include "UIManager.h"
+#include "RegionSelector.h"
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -164,6 +165,9 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         AddN(CreateWindowW(L"STATIC", L"R Bek:", WS_VISIBLE | WS_CHILD, 125, advY + stp, 65, 20, hwnd, NULL, NULL, NULL));
         g_hRWaitEdit = AddN(CreateWindowW(L"EDIT", L"20", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER, 195, advY + stp - 2, 35, 22, hwnd, (HMENU)IDC_EDT_R_W, NULL, NULL));
 
+        // Test Butonu: "Alan Seç"
+        AddN(CreateWindowW(L"BUTTON", L"Alan Sec (Test)", WS_VISIBLE | WS_CHILD, 15, 218, 250, 22, hwnd, (HMENU)999, NULL, NULL));
+
         g_hMasterBtn = AddN(CreateWindowW(L"BUTTON", L"SISTEM: PASIF (KAPALI)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 15, 245, 250, 40, hwnd, (HMENU)IDC_BTN_MAST, NULL, NULL));
         g_hStatusLabel = AddN(CreateWindowW(L"STATIC", L"CAPSLOCK: KAPALI", WS_VISIBLE | WS_CHILD | SS_CENTER, 15, 295, 250, 20, hwnd, NULL, NULL, NULL));
 
@@ -212,6 +216,11 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
         break;
     }
+    
+    // Test Butonu: "HP Seç"
+    CreateWindowW(L"BUTTON", L"Alan Sec (Test)", WS_VISIBLE | WS_CHILD, 15, 215, 120, 25, hwnd, (HMENU)999, NULL, NULL);
+
+
     case WM_LBUTTONDOWN: {
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
         if (pt.y < 35) {
@@ -321,12 +330,27 @@ LRESULT UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
         else if (id == IDC_BTN_CLOSE) { DestroyWindow(hwnd); }
         else if (id == IDC_BTN_MIN) { ShowWindow(hwnd, SW_MINIMIZE); }
+        else if (id == 999) {
+            // Butona tıklandığında Seçim Modülünü çağır
+            RECT secim = RegionSelector::SelectRegion();
+
+            // Eğer ESC'ye basılmadıysa ve bir yer seçildiyse boyutları ekrana yazdır
+            if (secim.right > secim.left && secim.bottom > secim.top) {
+                int width = secim.right - secim.left;
+                int height = secim.bottom - secim.top;
+
+                wchar_t mesaj[256];
+                wsprintfW(mesaj, L"X: %d, Y: %d\nGenislik: %d, Yukseklik: %d", secim.left, secim.top, width, height);
+                MessageBoxW(hwnd, mesaj, L"Secim Basarili", MB_OK | MB_ICONINFORMATION);
+            }
+        }
         else if (id == IDC_BTN_TOP) {
             g_isTopMost = !g_isTopMost;
             SetWindowTextW(g_hTopBtn, g_isTopMost ? L"USTTE: ON" : L"USTTE: OFF");
             SetWindowPos(hwnd, g_isTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             InvalidateRect(g_hTopBtn, NULL, FALSE);
         }
+        
         if (HIWORD(wParam) == EN_CHANGE) { ReadAndApplySettings(); }
         break;
     }
