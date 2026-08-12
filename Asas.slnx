@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Asas.vcxproj" Id="87d3e243-a158-49a8-ab6a-88f43e889df1" />
+</Solution>
