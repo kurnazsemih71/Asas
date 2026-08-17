@@ -6,6 +6,7 @@ Projeyi kullanıma açıyorum, dilediğiniz gibi kullanabilirsiniz.
 Proje temelinde Asas makrosu olarak geliştirildi, yani varsayılan ayarları Asas'a göre ayarlıdır. 
 
 ----------Macro Performans Önerileri/Rehberi--------
+
 Diğer joblar içinde ms düzeyini 350-650 arası değiştirerek stabil bir şekilde skill kaçırmadan kullanabilirsiniz.
 
 Atta yer alan Skill basma, Skill Bekleme, R basma, R bekleme süreleriyle oynamanızı tavsiye etmem. 
