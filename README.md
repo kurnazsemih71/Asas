@@ -1,6 +1,12 @@
 # Ücretsiz Asas, Warrior, BP Makrosu.
 C++ Makro Projesi
 
+<-------! Önemli !-------->
+
+Eğer proje çalışmaz da hata verirse OpenCV 4.1.2 sürümünü bilgisayarınıza kurun. Ardından Path'e ekleyin. Yoksa çalıştıramazsınız!
+
+<-------! Önemli !-------->
+
 Projeyi kullanıma açıyorum, dilediğiniz gibi kullanabilirsiniz.
 
 Proje temelinde Asas makrosu olarak geliştirildi, yani varsayılan ayarları Asas'a göre ayarlıdır. 
